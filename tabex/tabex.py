@@ -13,7 +13,7 @@ class Pipeline:
     def __init__(self, img_path):
         self.img_path = img_path
 
-    def load_images(self):
+    def load_image(self):
         self.img_color = cv2.imread(self.img_path)
         self.img_grayscale = cv2.cvtColor(self.img_color, cv2.COLOR_BGR2GRAY)
         self.img_bin = cv2.adaptiveThreshold(self.img_grayscale, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,15,5)
@@ -43,9 +43,9 @@ class Pipeline:
             self.data = f(self.data, *args, **config, **kwargs)
         except AttributeError:
             self.data = f(*args, **config, **kwargs)
-            
+
         return self
-        
+
 
 
 
@@ -61,8 +61,8 @@ def check_path(path:np.ndarray, tol=1):
 
     lens = path - np.roll(path,1, axis=0)
     angles_ok = [
-        (90 - tol) < angle(side1,side2) < (90 + tol) 
-        for side1, side2 
+        (90 - tol) < angle(side1,side2) < (90 + tol)
+        for side1, side2
         in zip(lens, np.roll(lens,1, axis=0))
         ]
     return all(angles_ok)
@@ -77,19 +77,19 @@ def show(df, img, annotate=True, figsize=(20,20), color='red', annotation_color=
         ax.add_patch(patches.Rectangle((x-1,y-1), w, h, linewidth=linewidth, edgecolor=color, facecolor='none'))
         if annotate:
             plt.annotate(idx, (x,y),xytext=(0,-10), textcoords='offset pixels', color=annotation_color)
-            
+
 
 def check_bg(img, color, granularity, dist=1):
 
     def to_rgb(input):
-        if np.isscalar(input): 
+        if np.isscalar(input):
             return cv2.cvtColor(np.array(input, dtype=np.uint8).reshape(1,1),cv2.COLOR_GRAY2RGB).ravel()
         else:
             return np.array(input, dtype=np.uint8)
-    
-    
+
+
     def to_gray(input):
-        if np.isscalar(input): 
+        if np.isscalar(input):
             return np.array(input, dtype=np.uint8)
         else:
             return cv2.cvtColor(np.array(input, dtype=np.uint8).reshape(1,1,3),cv2.COLOR_RGB2GRAY).ravel()
@@ -138,14 +138,14 @@ def filter_by_bg(df, bg_img, color, granularity, dist=1):
             df.apply(
                 lambda row:
                 check_bg(
-                    bg_img[row['y']:row['y']+row['h'], row['x']:row['x']+row['w']], 
+                    bg_img[row['y']:row['y']+row['h'], row['x']:row['x']+row['w']],
                     color=color, granularity=granularity, dist=dist),
             axis=1)
         ]
 
 
 def find_table_cells(
-    img_bin, 
+    img_bin,
     min_cell_perimeter,
     bg_img=None,
     bg_expected_col=(250,250,250),
@@ -162,7 +162,7 @@ def find_table_cells(
 
     filtered_contours = []
     filtered_hierarchy = []
-    for idx, (contour, relations) in enumerate(zip(contours, hierarchy[0])):    
+    for idx, (contour, relations) in enumerate(zip(contours, hierarchy[0])):
 
         path_len = cv2.arcLength(contour,True)
         if path_len < min_cell_perimeter or path_len > sum(img_bin.shape * 2) * max_frame_fraction:
@@ -170,18 +170,18 @@ def find_table_cells(
 
         approx = cv2.approxPolyDP(contour, polygon_precision*path_len,True)
         if len(approx) != 4:
-            continue 
+            continue
 
         if not check_path(approx.reshape(-1,2), tol=rectangle_angle_precision):
             continue
-    
+
         x,y,w,h = cv2.boundingRect(approx)
         d = allowable_edge_distance
         if any([x <= d, y <= d, x+w >= img_bin.shape[1]-d, y+h >= img_bin.shape[0]-d]):
             continue
 
         if (
-            bg_img is not None and 
+            bg_img is not None and
             not check_bg(bg_img[y:y+h, x:x+w], bg_expected_col, bg_colorspace_chunk, bg_colorspace_tol)
             ):
             continue
@@ -191,7 +191,7 @@ def find_table_cells(
 
     items = (
         pd.DataFrame(
-            filtered_hierarchy, 
+            filtered_hierarchy,
             columns=['index','table_idx']
         )
         .join(
@@ -217,14 +217,14 @@ def hclust(s:pd.DataFrame, threshold):
     pred = (
         pd.Series(
             AgglomerativeClustering(
-                distance_threshold=threshold, 
+                distance_threshold=threshold,
                 n_clusters=None
             )
             .fit_predict(s),
             name='pred',
             index=s.index
         )
-        .sort_values(key=lambda pred: s.squeeze()) 
+        .sort_values(key=lambda pred: s.squeeze())
     )
     # relying on the fact that sorted input will have clusters grouped together
     changepoints = pred != pred.shift(1)
@@ -235,7 +235,7 @@ def hclust(s:pd.DataFrame, threshold):
 
 def tableify(cells, min_char_height):
     '''
-    
+
     '''
 
     if len(cells) > 1:
@@ -244,15 +244,15 @@ def tableify(cells, min_char_height):
     else:
         cells['col'] = 0
         cells['row'] = 0
-    
+
     colticks = cells.groupby('col')['x'].mean()
     rowticks = cells.groupby('row')['y'].mean()
-    
+
     colwidths = colticks.diff().shift(-1).fillna(cells.query('col==col.max()')['w'].mean())
     rowheights = rowticks.diff().shift(-1).fillna(cells.query('row==row.max()')['h'].mean())
-    
-    
-    cells['col_to_merge'] = (   
+
+
+    cells['col_to_merge'] = (
         (cells['x'] + cells['w'])
         .apply(
             lambda col_end:
@@ -261,20 +261,20 @@ def tableify(cells, min_char_height):
         )
         - cells['col']
     )
-    
-    cells['row_to_merge'] = (   
+
+    cells['row_to_merge'] = (
         (cells['y'] + cells['h'])
         .apply(
             lambda row_end:
             ((rowticks + rowheights - row_end).abs() < min_char_height)
-            .pipe(lambda s: s[s].index.max())       
+            .pipe(lambda s: s[s].index.max())
         )
         - cells['row']
     )
 
     cells['colticks'] = colticks.reindex(cells['col']).values
     cells['rowticks'] = rowticks.reindex(cells['row']).values
-    
+
     cells['colwidths'] = colwidths.reindex(cells['col']).values
     cells['rowheights'] = rowheights.reindex(cells['row']).values
 
@@ -288,7 +288,7 @@ def tableify(cells, min_char_height):
 
 def extract_tables(cells, min_char_height):
 
-    return ( 
+    return (
         cells
         .groupby('table_idx')
         .apply(tableify, min_char_height)
@@ -331,7 +331,7 @@ def to_df(table):
 
 def tables_to_excel(tabledf, filename, merge_in_first_n=None):
 
-    
+
     with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
 
         for tablename, table in tabledf.groupby('table_idx'):
@@ -342,15 +342,15 @@ def tables_to_excel(tabledf, filename, merge_in_first_n=None):
             unstacked = to_df(table)
 
             unstacked.to_excel(
-                    writer, 
-                    index=False, 
+                    writer,
+                    index=False,
                     header=False,
                     startcol=unstacked.columns.min(),
                     sheet_name=str(tablename)
             )
 
             sheet = writer.sheets[str(tablename)]
-            
+
 
             for idx, cell in (
                 table
@@ -363,9 +363,9 @@ def tables_to_excel(tabledf, filename, merge_in_first_n=None):
             ):
 
                 sheet.merge_range(
-                    int(cell['row']), 
-                    int(cell['col']), 
-                    int(cell['row'] + cell['row_to_merge']), 
+                    int(cell['row']),
+                    int(cell['col']),
+                    int(cell['row'] + cell['row_to_merge']),
                     int(cell['col'] + cell['col_to_merge']),
                     data=cell.fillna('')['text'])
 
@@ -383,7 +383,7 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
 
     if merge_in_first_n is None:
         merge_in_first_n = np.nan
-    
+
     document = docx.Document()
 
     for tablename, table in tabledf.groupby('table_idx'):
@@ -399,7 +399,7 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
         for colidx, width in table.groupby('col')['colwidths'].first().items():
             for c in doctable.columns[colidx].cells:
                 c.width = docx.shared.Pt(width)
-            
+
         for rowidx, height in table.groupby('row')['rowheights'].first().items():
             for c in doctable.rows[rowidx].cells:
                 c.height = docx.shared.Pt(height)
@@ -411,7 +411,7 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
                 doctable.cell(cell['row'], cell['col']).merge(
                     doctable.cell(cell['row']+cell['row_to_merge'], cell['col']+cell['col_to_merge'])
                 ).text = str(cell['text'])
-            
+
             else:
                 doctable.cell(cell['row'], cell['col']).text = str(cell['text'])
 
@@ -419,14 +419,12 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
     document.save(filename)
 
 
-(
-    Pipeline('./80.png')
-    .load_images()
-    .pipe(find_table_cells)
-    .pipe(extract_tables)
-    .pipe(ocr, ocr_agent='tesseract', config='--psm 6')
-    .pipe(tables_to_docx, 'test.docx')
-)
-
-
-
+if __name__ == '__main__':
+    (
+        Pipeline('./example.png')
+        .load_image()
+        .pipe(find_table_cells)
+        .pipe(extract_tables)
+        .pipe(ocr, ocr_agent='tesseract', config='--psm 6')
+        .pipe(tables_to_docx, 'test.docx')
+    )
