@@ -48,8 +48,7 @@ class Pipeline:
 
 
 
-
-def check_path(path:np.ndarray, tol=1):
+def check_path(path:np.ndarray, tol=1) -> None:
     '''
     path: array of shape (points, dimensions of each point)
     tol: tolerance in degrees, describes how much the path can deviate from a rectangle
@@ -64,35 +63,74 @@ def check_path(path:np.ndarray, tol=1):
         (90 - tol) < angle(side1,side2) < (90 + tol)
         for side1, side2
         in zip(lens, np.roll(lens,1, axis=0))
-        ]
+    ]
     return all(angles_ok)
 
 
-def show(df, img, annotate=True, figsize=(20,20), color='red', annotation_color='darkred', linewidth=1):
+def show(
+    df:pd.DataFrame,
+    img:np.ndarray,
+    annotate=True,
+    figsize=(20,20),
+    color='red',
+    annotation_color='darkred',
+    linewidth=1
+):
+    '''
+    Display the detected cells dataframe as a set of rectangles on the image
+    '''
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.imshow(img, 'gray')
     for idx, (x, y, w, h) in zip(df.index, df[['x', 'y', 'w', 'h']].values):
-        ax.add_patch(patches.Rectangle((x-1,y-1), w, h, linewidth=linewidth, edgecolor=color, facecolor='none'))
+        ax.add_patch(
+            patches.Rectangle(
+                (x-1,y-1),
+                w, h,
+                linewidth=linewidth,
+                edgecolor=color,
+                facecolor='none'
+            )
+        )
         if annotate:
-            plt.annotate(idx, (x,y),xytext=(0,-10), textcoords='offset pixels', color=annotation_color)
+            plt.annotate(
+                idx,
+                (x,y),
+                xytext=(0,-10),
+                textcoords='offset pixels',
+                color=annotation_color
+            )
 
 
-def check_bg(img, color, granularity, dist=1):
+def check_bg(
+    img:np.ndarray,
+    color,
+    granularity,
+    dist=1
+):
+    '''
+    Split the image into bins by color and check that the
+    distance from the expected color to the most popular color is
+    less than the specified number of bins
+    '''
 
     def to_rgb(input):
         if np.isscalar(input):
-            return cv2.cvtColor(np.array(input, dtype=np.uint8).reshape(1,1),cv2.COLOR_GRAY2RGB).ravel()
+            return cv2.cvtColor(
+                np.array(input, dtype=np.uint8).reshape(1,1),
+                cv2.COLOR_GRAY2RGB
+            ).ravel()
         else:
             return np.array(input, dtype=np.uint8)
-
 
     def to_gray(input):
         if np.isscalar(input):
             return np.array(input, dtype=np.uint8)
         else:
-            return cv2.cvtColor(np.array(input, dtype=np.uint8).reshape(1,1,3),cv2.COLOR_RGB2GRAY).ravel()
-
+            return cv2.cvtColor(
+                np.array(input, dtype=np.uint8).reshape(1,1,3),
+                cv2.COLOR_RGB2GRAY
+            ).ravel()
 
 
     if len(img.shape) == 3:
@@ -105,20 +143,15 @@ def check_bg(img, color, granularity, dist=1):
         color = to_gray(color)
         granularity = to_gray(granularity)
 
-
     hist, edges = np.histogramdd(img, bins=(255/granularity).astype(int))
     idxmax = np.unravel_index(np.argmax(hist), hist.shape)
-
 
     target_idx = np.array([
         np.abs(t - ar).argmin()
         for t, ar in zip(color, edges)
     ])
 
-
     return np.all(np.abs(idxmax - target_idx) <= dist)
-
-
 
 
 def get_min_char_height(file):
@@ -132,20 +165,9 @@ def get_min_char_height(file):
     )
 
 
-def filter_by_bg(df, bg_img, color, granularity, dist=1):
-    return df[
-            df.apply(
-                lambda row:
-                check_bg(
-                    bg_img[row['y']:row['y']+row['h'], row['x']:row['x']+row['w']],
-                    color=color, granularity=granularity, dist=dist),
-            axis=1)
-        ]
-
-
 def find_table_cells(
-    img_bin,
-    min_cell_perimeter,
+    img_bin:np.ndarray,
+    min_cell_perimeter:'float|int',
     bg_img=None,
     bg_expected_col=(250,250,250),
     bg_colorspace_chunk=(10,10,10),
@@ -154,8 +176,16 @@ def find_table_cells(
     rectangle_angle_precision=1,
     polygon_precision=0.01,
     max_frame_fraction=0.8,
-    ):
-
+    ) -> pd.DataFrame:
+    '''
+    Find all the contours in a binarized image and filter them based on
+    some sanity checks, resulting in a dataframe of metadata about the cells.
+    Checks include:
+      - being a rectangle
+      - not being smaller than the smallest letter
+      - not being crooked
+      - having an expected background color
+    '''
 
     contours, hierarchy = cv2.findContours(img_bin, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
@@ -176,13 +206,23 @@ def find_table_cells(
 
         x,y,w,h = cv2.boundingRect(approx)
         d = allowable_edge_distance
-        if any([x <= d, y <= d, x+w >= img_bin.shape[1]-d, y+h >= img_bin.shape[0]-d]):
+        if any([
+            x <= d,
+            y <= d,
+            x+w >= img_bin.shape[1]-d,
+            y+h >= img_bin.shape[0]-d
+        ]):
             continue
 
         if (
             bg_img is not None and
-            not check_bg(bg_img[y:y+h, x:x+w], bg_expected_col, bg_colorspace_chunk, bg_colorspace_tol)
-            ):
+            not check_bg(
+                bg_img[y:y+h, x:x+w],
+                bg_expected_col,
+                bg_colorspace_chunk,
+                bg_colorspace_tol
+            )
+        ):
             continue
 
         filtered_contours.append((x,y,w,h))
@@ -201,14 +241,18 @@ def find_table_cells(
         .set_index('index')
     )
 
-    return items.drop(index=items['table_idx'],errors='ignore').reset_index(drop=True)
+    return (
+        items
+        .drop(index=items['table_idx'],errors='ignore')
+        .reset_index(drop=True)
+    )
 
 
 
 
 
 
-def hclust(s:pd.DataFrame, threshold):
+def hclust(s:pd.DataFrame, threshold:float):
 
     if isinstance(s, pd.Series):
         s = s.to_frame()
@@ -232,9 +276,10 @@ def hclust(s:pd.DataFrame, threshold):
     return changepoints.cumsum() - 1
 
 
-def tableify(cells, min_char_height):
+def tableify(cells:pd.DataFrame, min_char_height:float):
     '''
-
+        Calculate which rows and columns the cells belong to,
+        and how to merge them
     '''
 
     if len(cells) > 1:
@@ -289,7 +334,7 @@ def tableify(cells, min_char_height):
     return cells
 
 
-def extract_tables(cells, min_char_height):
+def extract_tables(cells:pd.DataFrame, min_char_height:float):
 
     return (
         cells
@@ -299,7 +344,10 @@ def extract_tables(cells, min_char_height):
     )
 
 
-def ocr(rois, img, ocr_agent, cleanup=True, **ocr_kwargs):
+def ocr(rois:pd.DataFrame, img:np.ndarray, ocr_agent:str, cleanup=True, **ocr_kwargs):
+    '''
+    perform ocr on individual cells, focusing on recognition
+    '''
 
     if ocr_agent == 'tesseract':
         ocr_agent = lp.TesseractAgent(**ocr_kwargs)
@@ -321,7 +369,11 @@ def ocr(rois, img, ocr_agent, cleanup=True, **ocr_kwargs):
     else:
         return rois
 
-def to_df(table):
+def to_df(table:pd.DataFrame):
+    '''
+    builds the table as it looks in the source (or close to it)
+    using the column and row metadata
+    '''
     if 'text' not in table:
         raise ValueError('This dataframe lacks the column "text", which means no ocr was performed')
 
@@ -333,28 +385,35 @@ def to_df(table):
         .unstack()
     )
 
-def tables_to_excel(tabledf, filename, merge_in_first_n=None):
-
-
+def tables_to_excel(tabledf:pd.DataFrame, filename:str, merge_in_first_n=None):
+    '''
+    uses the metadata to build the replica of the table in question in excel,
+    merging cells and setting sizes accordingly
+    '''
     with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
 
         for tablename, table in tabledf.groupby('table_idx'):
 
             if table[['col','row']].isna().any().any():
-                raise ValueError('a table has nans for col/row:', table[['col','row']].pipe(lambda df: df[df[['col','row']].isna().any(axis=1)]))
+                raise ValueError(
+                    'a table has nans for col/row:',
+                    table[['col','row']]
+                    .pipe(
+                        lambda df:
+                        df[df[['col','row']].isna().any(axis=1)]
+                    )
+                )
 
             unstacked = to_df(table)
 
             unstacked.to_excel(
-                    writer,
-                    index=False,
-                    header=False,
-                    startcol=unstacked.columns.min(),
-                    sheet_name=str(tablename)
+                writer,
+                index=False,
+                header=False,
+                startcol=unstacked.columns.min(),
+                sheet_name=str(tablename)
             )
-
             sheet = writer.sheets[str(tablename)]
-
 
             for idx, cell in (
                 table
@@ -365,7 +424,6 @@ def tables_to_excel(tabledf, filename, merge_in_first_n=None):
                         (table[['col_to_merge','row_to_merge']]>0).any(axis=1)]
                     .iterrows())
             ):
-
                 sheet.merge_range(
                     int(cell['row']),
                     int(cell['col']),
@@ -383,7 +441,11 @@ def tables_to_excel(tabledf, filename, merge_in_first_n=None):
 
 
 
-def tables_to_docx(tabledf, filename, merge_in_first_n=None):
+def tables_to_docx(tabledf:pd.DataFrame, filename:str, merge_in_first_n=None):
+    '''
+    uses the metadata to build the replica of the table in question in docx,
+    merging cells and setting sizes accordingly
+    '''
 
     if merge_in_first_n is None:
         merge_in_first_n = np.nan
@@ -393,9 +455,19 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
     for tablename, table in tabledf.groupby('table_idx'):
 
         if table[['col','row']].isna().any().any():
-            raise ValueError('a table has nans for col/row:', table[['col','row']].pipe(lambda df: df[df[['col','row']].isna().any(axis=1)]))
+            raise ValueError(
+                'a table has nans for col/row:',
+                table[['col','row']]
+                .pipe(
+                    lambda df:
+                    df[df[['col','row']].isna().any(axis=1)]
+                )
+            )
 
-        doctable = document.add_table(rows=table['row'].max()+1, cols=table['col'].max()+1)
+        doctable = document.add_table(
+            rows=table['row'].max()+1,
+            cols=table['col'].max()+1
+        )
         doctable.style = 'TableGrid'
         doctable.autofit = False
         doctable.alignment = docx.enum.table.WD_TABLE_ALIGNMENT.CENTER
@@ -411,10 +483,22 @@ def tables_to_docx(tabledf, filename, merge_in_first_n=None):
 
         for idx, cell in table.fillna({'text':''}).iterrows():
 
-            if (cell[['col_to_merge','row_to_merge']] > 0).any() and not cell['row']>=merge_in_first_n:
-                doctable.cell(cell['row'], cell['col']).merge(
-                    doctable.cell(cell['row']+cell['row_to_merge'], cell['col']+cell['col_to_merge'])
-                ).text = str(cell['text'])
+            if (
+                (cell[['col_to_merge','row_to_merge']] > 0).any()
+                and not cell['row']>=merge_in_first_n
+            ):
+
+                merged = (
+                    doctable
+                    .cell(cell['row'], cell['col'])
+                    .merge(
+                        doctable.cell(
+                            cell['row']+cell['row_to_merge'],
+                            cell['col']+cell['col_to_merge']
+                        )
+                    )
+                )
+                merged.text = str(cell['text'])
 
             else:
                 doctable.cell(cell['row'], cell['col']).text = str(cell['text'])
