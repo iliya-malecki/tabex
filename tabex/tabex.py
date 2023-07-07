@@ -72,7 +72,6 @@ def show(df, img, annotate=True, figsize=(20,20), color='red', annotation_color=
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.imshow(img, 'gray')
-
     for idx, (x, y, w, h) in zip(df.index, df[['x', 'y', 'w', 'h']].values):
         ax.add_patch(patches.Rectangle((x-1,y-1), w, h, linewidth=linewidth, edgecolor=color, facecolor='none'))
         if annotate:
@@ -259,7 +258,9 @@ def tableify(cells, min_char_height):
             ((colticks + colwidths - col_end).abs() < min_char_height)
             .pipe(lambda s: s[s].index.max())
         )
-        - cells['col']
+        .pipe(lambda x: x - cells['col'])
+        .fillna(0)
+        .astype(int)
     )
 
     cells['row_to_merge'] = (
@@ -269,7 +270,9 @@ def tableify(cells, min_char_height):
             ((rowticks + rowheights - row_end).abs() < min_char_height)
             .pipe(lambda s: s[s].index.max())
         )
-        - cells['row']
+        .pipe(lambda x: x - cells['row'])
+        .fillna(0)
+        .astype(int)
     )
 
     cells['colticks'] = colticks.reindex(cells['col']).values
@@ -303,6 +306,7 @@ def ocr(rois, img, ocr_agent, cleanup=True, **ocr_kwargs):
 
     rois['text'] = (
         rois
+        [['x','y','h','w']]
         .astype(int)
         .apply(
             lambda row:
@@ -425,6 +429,6 @@ if __name__ == '__main__':
         .load_image()
         .pipe(find_table_cells)
         .pipe(extract_tables)
-        .pipe(ocr, ocr_agent='tesseract', config='--psm 6')
-        .pipe(tables_to_docx, 'test.docx')
+        .pipe(ocr, ocr_agent='tesseract', config='--psm 6', cleanup=False)
+        .pipe(tables_to_excel, 'test.xlsx')
     )
