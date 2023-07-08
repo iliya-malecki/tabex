@@ -18,7 +18,7 @@ setup(
         'pytesseract >= 0.3.10',
         'opencv-python >= 4.4',
         'python-docx >= 0.8.11',
-        'pandas >= 1.0',
+        'pandas >= 1.4.0, <2.0',
         'numpy >= 1.20',
         'scikit-learn >= 1.0',
     ],
