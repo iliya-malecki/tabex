@@ -16,9 +16,9 @@ class Pipeline:
 
 
     def load_image(self):
-        self.img_color = cv2.imread(self.img_path)
-        self.img_grayscale = cv2.cvtColor(self.img_color, cv2.COLOR_BGR2GRAY)
-        self.img_bin = cv2.adaptiveThreshold(self.img_grayscale, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,15,5)
+        self.img_color:np.ndarray = cv2.imread(self.img_path)
+        self.img_grayscale:np.ndarray = cv2.cvtColor(self.img_color, cv2.COLOR_BGR2GRAY)
+        self.img_bin:np.ndarray = cv2.adaptiveThreshold(self.img_grayscale, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,15,5)
         self.min_char_height = get_min_char_height(self.img_path)
         return self
 
@@ -108,9 +108,9 @@ class Pipeline:
 
 
     def extract_tables(self):
-        self.img_metadata = (
+        self.img_metadata: pd.DataFrame = (
             self.img_metadata
-            .groupby('table_idx')
+            .groupby('table_idx', group_keys=False)
             .apply(tableify, self.min_char_height)
             .sort_values(['table_y','table_x'])
         )
@@ -152,7 +152,7 @@ class Pipeline:
         return self
 
 
-    def tables_to_excel(self, filename:str, merge_in_first_n=None):
+    def to_excel(self, filename:str, merge_in_first_n=None):
         '''
         uses the metadata to build the replica of the table in question in excel,
         merging cells and setting sizes accordingly
@@ -206,7 +206,7 @@ class Pipeline:
                     sheet.set_row_pixels(rowidx, height)
 
 
-    def tables_to_docx(self, filename:str, merge_in_first_n=None):
+    def to_docx(self, filename:str, merge_in_first_n=None):
         '''
         uses the metadata to build the replica of the table in question in docx,
         merging cells and setting sizes accordingly
@@ -378,7 +378,7 @@ def check_bg(
     return np.all(np.abs(idxmax - target_idx) <= dist)
 
 
-def get_min_char_height(file):
+def get_min_char_height(file:str) -> float:
     return (
         pytesseract.image_to_data(file, output_type=pytesseract.Output.DATAFRAME)
         .replace(r'\s+',np.nan, regex=True)
@@ -498,5 +498,5 @@ if __name__ == '__main__':
         .find_table_cells()
         .extract_tables()
         .ocr(config='--psm 6')
-        .tables_to_excel('test.xlsx')
+        .to_excel('test.xlsx')
     )
