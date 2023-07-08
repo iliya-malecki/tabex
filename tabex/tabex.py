@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import layoutparser as lp
@@ -12,7 +11,53 @@ from sklearn.cluster import AgglomerativeClustering
 class Pipeline:
     def __init__(self, img_path):
         self.img_path = img_path
+        self.img_color = None
+        self.img_grayscale = None
+        self.img_bin = None
         self.img_metadata: pd.DataFrame = None
+        self.mutable = False
+
+
+    def __getattribute__(self, __name: str) -> Any:
+        if (
+            not callable(super().__getattribute__(__name))
+            or super().__getattribute__('mutable')
+        ):
+            return super().__getattribute__(__name)
+        else:
+            return object.__getattribute__(
+                super().__getattribute__('copy')(),
+                __name
+            )
+
+
+    def into_mutable(self):
+        if self.mutable:
+            raise ValueError('already mutable')
+        c = self.copy()
+        c.mutable = True
+        return c
+
+
+    def into_immutable(self):
+        if not self.mutable:
+            raise ValueError('already immutable')
+        c = self.copy()
+        c.mutable = False
+        return c
+
+
+    def copy(self):
+        c = Pipeline(self.img_path)
+        c.mutable = self.mutable
+        if self.img_color is not None:
+            c.img_color = self.img_color.copy()
+            c.img_grayscale = self.img_grayscale.copy()
+            c.img_bin = self.img_bin.copy()
+            c.min_char_height = self.min_char_height
+        if self.img_metadata is not None:
+            c.img_metadata = self.img_metadata.copy()
+        return c
 
 
     def load_image(self):
