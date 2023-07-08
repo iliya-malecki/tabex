@@ -543,5 +543,5 @@ if __name__ == '__main__':
         .find_table_cells()
         .extract_tables()
         .ocr(config='--psm 6')
-        .to_excel('test.xlsx')
+        .to_excel('example.xlsx')
     )
