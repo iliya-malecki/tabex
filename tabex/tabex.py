@@ -18,7 +18,7 @@ class Pipeline:
         self.mutable = False
 
 
-    def __getattribute__(self, __name: str) -> Any:
+    def __getattribute__(self, __name: str):
         if (
             not callable(super().__getattribute__(__name))
             or super().__getattribute__('mutable')
